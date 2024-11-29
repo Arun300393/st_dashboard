@@ -2,9 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import timedelta, datetime
 
-
-print(file_path)
-
 # Set page config
 st.set_page_config(page_title="Evonith Blast Furnace", layout="wide")
 

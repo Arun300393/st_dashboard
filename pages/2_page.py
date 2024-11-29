@@ -5,7 +5,6 @@ import plotly.express as px
 
 st.markdown("# Page 2 ❄️")
 
-
 @st.cache_data
 def load_data():
     data = pd.read_csv("steel_data.csv")

@@ -10,6 +10,7 @@ start_date = datetime(2019, 8, 19)
 end_date = datetime(2024, 9, 15)
 date_range = pd.date_range(start=start_date, end=end_date, freq='D')
 
+
 # Initialize data with zeros
 n_days = len(date_range)
 data = {
