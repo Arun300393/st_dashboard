@@ -9,41 +9,66 @@ import os
 import time
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 
+
+load_dotenv()
 # Set up WebDriver
 service = Service(ChromeDriverManager().install())
 
 download_dir = r'C:\Users\princ\Downloads\evonith_plant_data\\'
+
 # Configure Chrome options
 options  = webdriver.ChromeOptions()
 options.add_argument("--start-maximized")
-prefs = {'profile.default_content_settings.popups': 0,
+prefs = {'profile.default_content_settings.popups': False,
     'download.default_directory' : download_dir,
     'directory_upgrade': True}
 options.add_experimental_option('prefs', prefs)
-
+chrome_options = Options()
 driver = webdriver.Chrome(options=options)
 
-# Open the webpage
+#Open the webpage
+USERNAME = os.getenv("USERNAME_REALTIMEDATA")
+PASSWORD = os.getenv("PASSWORD_REALTIMEDATA")
 driver.get("https://mcartalert.com/WebService/GeneralService.asmx?op=realtimedataVP")
+
 
 def download_csv():
     """
     Automates the CSV download by clicking the download button.
     """
     try:
-        # Locate the input fields by ID (or another appropriate locator) and giving Creds.
-        # Locate and click the download button
-        input_field = WebDriverWait(driver, 10).until(
+    # Locate the input fields by ID (or another appropriate locator) and giving Creds.
+    # Locate and click the download button
+        username_input = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.NAME, "user"))
         )
-        input_field.send_keys("REALTIMEDATASERVICE")
-        input_field = WebDriverWait(driver, 10).until(
+        username_input.send_keys(USERNAME)
+        password_input = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.NAME, "password"))
         )
-        input_field.send_keys("283ALERT2024")
+        password_input.send_keys(PASSWORD)
         download_button = driver.find_element(By.CLASS_NAME, "button")  # Replace with correct locator
         download_button.click()
+        time.sleep(2)
+        main_window = driver.current_window_handle
+        all_windows = driver.window_handles
+        for window in all_windows:
+            if window != main_window:
+                driver.switch_to.window(window)
+                driver.close()
+            driver.switch_to.window(main_window)
+
+        username_input = WebDriverWait(driver, 5).until(
+        EC.presence_of_element_located((By.NAME, "user"))
+        )
+        username_input.clear()
+        password_input = WebDriverWait(driver, 5).until(
+        EC.presence_of_element_located((By.NAME, "password"))
+        )
+        password_input.clear()
+
     except Exception as e:
         st.error(f"Error downloading file: {e}")
 
@@ -52,6 +77,8 @@ def download_csv():
 st.title("Real-Time Data Dashboard")
 st.subheader("Live CSV Updates")
 
+if 'dataframe' not in st.session_state:
+    st.session_state.dataframe = pd.DataFrame()
 # Placeholder for plots
 placeholder = st.empty()
 
@@ -63,28 +90,53 @@ def read_latest_csv():
     if not files:
         return None
     latest_file = max(files, key=lambda x: os.path.getctime(os.path.join(download_dir, x)))
+    #TODO: Delete read csv files.
     return pd.read_csv(os.path.join(download_dir, latest_file))
 
-def update_dashboard():
+def data_validator(data: pd.DataFrame) -> pd.DataFrame:
+    return data
+
+def copy_to_db():
+    return None
+
+def update_dashboard(olddata: pd.DataFrame=None):
     """
     Periodically fetch and display the latest CSV data.
     """
-    while True:
-        download_csv()  # Trigger CSV download
-        time.sleep(60)  # Wait for 1 minute before the next download
-        
-        # Load the latest CSV data
-        data = read_latest_csv()
-        if data is not None:
-            with placeholder.container():
-                st.write("Last Updated:", time.strftime("%Y-%m-%d %H:%M:%S"))
-                st.dataframe(data)  # Display the DataFrame
-                
-                # Example plot
-                st.line_chart(data.select_dtypes(include=['float', 'int']))
+    download_csv()  # Trigger CSV download
+    
+    # Load the latest CSV data
+    newdata = read_latest_csv()
+    copy_to_db(newdata)
+    data_validator(newdata)
+
+    if olddata is not None:
+        if len(olddata) != 0:
+            data = pd.concat([olddata, newdata])
         else:
-            st.warning("No CSV files found. Waiting for the first download...")
+            data = newdata
+    else:
+        data = newdata
+    #TODO: Index of the dataframe should dhave date and time 
+    with placeholder.container():
+        st.write("Last Updated:", time.strftime("%Y-%m-%d %H:%M:%S"))
+        st.dataframe(data.tail(100))  # Display the DataFrame
+        
+        # Example plot
+        st.line_chart(data.select_dtypes(include=['float', 'int']))
+    return data
+
+def flush(data):
+    #TODO: Save the dataframe as csv file.
+    pass
 
 # Run the dashboard
 if st.button("Start Dashboard"):
-    update_dashboard()
+    while True:
+        if len(st.session_state.dataframe) >= 100000:
+            flush(st.session_state.dataframe)
+            st.session_state.dataframe = pd.Dataframe()
+        if len(st.session_state.dataframe) == 0:
+            st.session_state.dataframe = update_dashboard()
+        else:
+            st.session_state.dataframe = update_dashboard(st.session_state.dataframe)
